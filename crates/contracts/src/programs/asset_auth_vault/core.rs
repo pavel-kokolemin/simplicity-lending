@@ -29,15 +29,7 @@ impl ActiveAssetAuthVault {
     }
 
     pub fn from_finalized_vault(parameters: FinalizedAssetAuthVaultParameters) -> Self {
-        let finalized_vault = FinalizedAssetAuthVault::new(parameters);
-        let finalized_vault_hash = finalized_vault.get_script_hash();
-
-        let active_vault_parameters = ActiveAssetAuthVaultParameters::from_finalized_parameters(
-            &parameters,
-            finalized_vault_hash,
-        );
-
-        Self::new(active_vault_parameters)
+        Self::new(parameters.into())
     }
 
     pub fn get_parameters(&self) -> &ActiveAssetAuthVaultParameters {
@@ -83,6 +75,34 @@ impl ActiveAssetAuthVault {
             self.parameters.vault_asset_id,
             current_vault_amount - amount_to_withdraw,
         );
+    }
+
+    pub fn attach_supplying_with_goal(
+        &self,
+        ft: &mut FinalTransaction,
+        program_utxo: UTXO,
+        input_supplier_index: u32,
+        output_supplier_index: u32,
+        amount_to_supply: u64,
+        amount_to_goal: u64,
+    ) {
+        if amount_to_supply >= amount_to_goal {
+            self.attach_final_supplying(
+                ft,
+                program_utxo,
+                input_supplier_index,
+                output_supplier_index,
+                amount_to_supply,
+            );
+        } else {
+            self.attach_supplying(
+                ft,
+                program_utxo,
+                input_supplier_index,
+                output_supplier_index,
+                amount_to_supply,
+            );
+        }
     }
 
     pub fn attach_supplying(
@@ -187,21 +207,21 @@ impl SimplexProgram for ActiveAssetAuthVault {
         &self.parameters.network
     }
 
-    fn get_program_source_code(&self) -> &'static str {
+    fn get_program_source_code() -> &'static str {
         AssetAuthVaultProgram::SOURCE
     }
 }
 
 impl SimplexProgram for FinalizedAssetAuthVault {
+    fn get_program_source_code() -> &'static str {
+        AssetAuthVaultProgram::SOURCE
+    }
+
     fn get_program(&self) -> &Program {
         self.program.as_ref()
     }
 
     fn get_network(&self) -> &SimplicityNetwork {
         &self.parameters.network
-    }
-
-    fn get_program_source_code(&self) -> &'static str {
-        AssetAuthVaultProgram::SOURCE
     }
 }

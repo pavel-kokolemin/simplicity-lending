@@ -1,7 +1,10 @@
 #[path = "../common/mod.rs"]
 mod common;
 
-mod loan_liquidation_failure_flows;
-mod loan_liquidation_success_flows;
-mod loan_repayment_success_flows;
+mod creation_metadata_success_flow;
+mod full_offer_repayment_success_flows;
+mod offer_acceptance_success_flows;
+mod offer_cancellation_failure_flows;
+mod offer_cancellation_success_flows;
+mod offer_liquidation_success_flows;
 mod setup;

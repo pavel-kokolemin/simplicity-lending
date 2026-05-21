@@ -2,8 +2,6 @@ use lending_contracts::programs::asset_auth::{AssetAuth, AssetAuthParameters};
 
 use simplex::transaction::FinalTransaction;
 
-use crate::asset_auth_tests::common::tx_steps::finalize_and_broadcast;
-
 use super::common::issuance::issue_asset;
 use super::common::wallet::split_first_signer_utxo;
 
@@ -15,11 +13,9 @@ pub(super) fn setup_asset_auth(
     let provider = context.get_default_provider();
     let signer = context.get_default_signer();
 
-    let txid = split_first_signer_utxo(context, vec![1000]);
-    provider.wait(&txid)?;
+    split_first_signer_utxo(context, vec![1000]);
 
-    let (txid, asset_id) = issue_asset(context, asset_amount)?;
-    provider.wait(&txid)?;
+    let asset_id = issue_asset(context, asset_amount)?;
 
     let asset_auth_parameters = AssetAuthParameters {
         asset_id,
@@ -40,9 +36,7 @@ pub(super) fn setup_asset_auth(
         utxo_to_lock.explicit_amount(),
     );
 
-    let txid = finalize_and_broadcast(context, &ft)?;
-
-    provider.wait(&txid)?;
+    signer.broadcast(&ft)?.wait()?;
 
     Ok((asset_auth, asset_auth_parameters))
 }

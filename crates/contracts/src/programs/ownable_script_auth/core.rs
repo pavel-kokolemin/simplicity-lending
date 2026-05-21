@@ -21,6 +21,7 @@ impl OwnableScriptAuth {
         let mut program =
             OwnableScriptAuthProgram::new(parameters.build_arguments()).with_storage_capacity(1);
 
+        #[allow(unused_must_use)]
         program.set_storage_at(0, parameters.owner_pubkey.serialize());
 
         Self {
@@ -40,12 +41,6 @@ impl OwnableScriptAuth {
         amount_to_lock: u64,
     ) {
         self.add_program_output(ft, asset_id_to_lock, amount_to_lock);
-
-        ft.add_output(PartialOutput::new(
-            Script::new_op_return(self.parameters.owner_pubkey.serialize().as_slice()),
-            0,
-            AssetId::default(),
-        ));
     }
 
     pub fn attach_ownership_transfer(
@@ -76,8 +71,12 @@ impl OwnableScriptAuth {
 
         self.add_program_output(ft, locked_asset, locked_amount);
 
+        self.attach_metadata(ft);
+    }
+
+    pub fn attach_metadata(&self, ft: &mut FinalTransaction) {
         ft.add_output(PartialOutput::new(
-            Script::new_op_return(new_owner.serialize().as_slice()),
+            Script::new_op_return(self.parameters.owner_pubkey.serialize().as_slice()),
             0,
             AssetId::default(),
         ));
@@ -103,21 +102,22 @@ impl OwnableScriptAuth {
     }
 
     fn apply_ownership_transfer(&mut self, new_owner: XOnlyPublicKey) {
+        #[allow(unused_must_use)]
         self.program.set_storage_at(0, new_owner.serialize());
         self.parameters.owner_pubkey = new_owner;
     }
 }
 
 impl SimplexProgram for OwnableScriptAuth {
+    fn get_program_source_code() -> &'static str {
+        OwnableScriptAuthProgram::SOURCE
+    }
+
     fn get_program(&self) -> &Program {
         self.program.as_ref()
     }
 
     fn get_network(&self) -> &SimplicityNetwork {
         &self.parameters.network
-    }
-
-    fn get_program_source_code(&self) -> &'static str {
-        OwnableScriptAuthProgram::SOURCE
     }
 }
