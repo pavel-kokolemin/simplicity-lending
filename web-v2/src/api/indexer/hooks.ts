@@ -1,4 +1,9 @@
-import { useQuery, type UseQueryResult } from '@tanstack/react-query'
+import {
+  type QueryKey,
+  useQuery,
+  type UseQueryOptions,
+  type UseQueryResult,
+} from '@tanstack/react-query'
 
 import { GC_TIME_MS, STALE_TIME_MS } from '../staleTime'
 import {
@@ -8,17 +13,45 @@ import {
   fetchOfferParticipants,
   fetchOfferParticipantsHistory,
   fetchOffers,
+  fetchOffersBatch,
   fetchOfferUtxos,
   type ListOffersParams,
 } from './methods'
 import { offersQueryKeys } from './queryKeys'
 import type { OfferDetails, OfferParticipant, OfferShort, OfferUtxo } from './schemas'
 
-export function useOffers(params: ListOffersParams = {}): UseQueryResult<OfferShort[]> {
+export interface ExtraQueryOptions<T = unknown> {
+  refetchInterval?: number
+  staleTime?: number
+  placeholderData?: UseQueryOptions<T, Error, T, QueryKey>['placeholderData']
+}
+
+export function useOffers(
+  params: ListOffersParams = {},
+  options: ExtraQueryOptions<OfferShort[]> = {},
+): UseQueryResult<OfferShort[]> {
   return useQuery({
     queryKey: offersQueryKeys.list(params),
     queryFn: ({ signal }) => fetchOffers(params, { signal }),
-    staleTime: STALE_TIME_MS.medium,
+    staleTime: options.staleTime ?? STALE_TIME_MS.medium,
+    refetchInterval: options.refetchInterval,
+    placeholderData: options.placeholderData,
+  })
+}
+
+// Fetch offers by exact id list (POST /offers/batch). Use for the user's own
+// offers, where the id set is known and must be resolved fully — unlike the
+// paginated `useOffers`, which only returns one page.
+export function useOffersBatch(
+  ids: string[],
+  options: ExtraQueryOptions<OfferDetails[]> = {},
+): UseQueryResult<OfferDetails[]> {
+  return useQuery({
+    queryKey: offersQueryKeys.batch(ids),
+    queryFn: ({ signal }) => fetchOffersBatch(ids, { signal }),
+    staleTime: options.staleTime ?? STALE_TIME_MS.realtime,
+    refetchInterval: options.refetchInterval,
+    enabled: ids.length > 0,
   })
 }
 
@@ -59,20 +92,28 @@ export function useOfferParticipantsHistory(offerId: string): UseQueryResult<Off
   })
 }
 
-export function useOfferIdsByScript(scriptPubkeyHex: string): UseQueryResult<string[]> {
+export function useOfferIdsByScript(
+  scriptPubkeyHex: string,
+  options: ExtraQueryOptions<string[]> = {},
+): UseQueryResult<string[]> {
   return useQuery({
     queryKey: offersQueryKeys.byScript(scriptPubkeyHex),
     queryFn: ({ signal }) => fetchOfferIdsByScript(scriptPubkeyHex, { signal }),
-    staleTime: STALE_TIME_MS.realtime,
+    staleTime: options.staleTime ?? STALE_TIME_MS.realtime,
+    refetchInterval: options.refetchInterval,
     enabled: !!scriptPubkeyHex,
   })
 }
 
-export function useOfferIdsByBorrowerPubkey(borrowerPubkeyHex: string): UseQueryResult<string[]> {
+export function useOfferIdsByBorrowerPubkey(
+  borrowerPubkeyHex: string,
+  options: ExtraQueryOptions<string[]> = {},
+): UseQueryResult<string[]> {
   return useQuery({
     queryKey: offersQueryKeys.byBorrower(borrowerPubkeyHex),
     queryFn: ({ signal }) => fetchOfferIdsByBorrowerPubkey(borrowerPubkeyHex, { signal }),
-    staleTime: STALE_TIME_MS.realtime,
+    staleTime: options.staleTime ?? STALE_TIME_MS.realtime,
+    refetchInterval: options.refetchInterval,
     enabled: !!borrowerPubkeyHex,
   })
 }

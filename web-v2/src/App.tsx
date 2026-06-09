@@ -8,6 +8,7 @@ import { AppProviders } from '@/providers/AppProviders'
 import ErrorBoundary from './components/ErrorBoundary'
 import BorrowPage from './pages/Borrow'
 import DashboardPage from './pages/Dashboard'
+import DemoPage from './pages/Demo'
 import DesignSystemPage from './pages/DesignSystem'
 import SupplyPage from './pages/Supply'
 
@@ -34,6 +35,10 @@ const router = createBrowserRouter([
             {
               path: RoutePath.DesignSystem,
               element: <DesignSystemPage />,
+            },
+            {
+              path: RoutePath.Demo,
+              element: <DemoPage />,
             },
           ]
         : []),

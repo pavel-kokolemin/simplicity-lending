@@ -41,11 +41,21 @@ function postBatch<Schema extends z.ZodTypeAny>(
   })
 }
 
+export type SortDir = 'asc' | 'desc'
+
+export type SortField =
+  | 'collateral_amount'
+  | 'principal_amount'
+  | 'interest_rate'
+  | 'loan_expiration_time'
+
 export interface ListOffersParams {
   status?: OfferStatus
   asset?: string
   limit?: number
   offset?: number
+  sortBy?: SortField
+  sortDir?: SortDir
 }
 
 function toQueryParams(params: ListOffersParams): Record<string, string> {
@@ -54,6 +64,8 @@ function toQueryParams(params: ListOffersParams): Record<string, string> {
   if (params.asset) queryParams.asset = params.asset
   if (params.limit !== undefined) queryParams.limit = String(params.limit)
   if (params.offset !== undefined) queryParams.offset = String(params.offset)
+  if (params.sortBy) queryParams.sort_by = params.sortBy
+  if (params.sortDir) queryParams.sort_dir = params.sortDir
   return queryParams
 }
 
