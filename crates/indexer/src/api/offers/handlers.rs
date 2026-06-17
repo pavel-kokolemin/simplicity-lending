@@ -6,11 +6,24 @@ use axum::{
 };
 use uuid::Uuid;
 
+use crate::api::openapi::{ErrorResponse, OfferDetailsResponseSchema, OfferListParams};
 use crate::api::params::ScriptQuery;
+use crate::api::utils::parse_script_pubkey;
 use crate::api::{ApiError, AppState, OfferListQuery};
 
 use super::dto::{OfferDetailsResponse, OfferListResponse};
 
+#[utoipa::path(
+    get,
+    path = "/offers",
+    tag = "offers",
+    params(OfferListParams),
+    responses(
+        (status = 200, description = "Paginated short offer list", body = OfferListResponse),
+        (status = 400, description = "Invalid query parameters", body = ErrorResponse),
+        (status = 500, description = "Internal server error", body = ErrorResponse),
+    )
+)]
 #[tracing::instrument(name = "Getting offers list", skip(state, query))]
 pub async fn list_offers(
     State(state): State<Arc<AppState>>,
@@ -21,6 +34,17 @@ pub async fn list_offers(
     Ok(Json(offers))
 }
 
+#[utoipa::path(
+    get,
+    path = "/offers/{id}",
+    tag = "offers",
+    params(("id" = Uuid, Path, description = "Offer UUID")),
+    responses(
+        (status = 200, description = "Full offer details with participants and unspent UTXOs", body = OfferDetailsResponseSchema),
+        (status = 404, description = "Offer not found", body = ErrorResponse),
+        (status = 500, description = "Internal server error", body = ErrorResponse),
+    )
+)]
 #[tracing::instrument(name = "Getting offer details", skip(state, offer_id))]
 pub async fn get_details(
     State(state): State<Arc<AppState>>,
@@ -33,13 +57,23 @@ pub async fn get_details(
     Ok(Json(details))
 }
 
+#[utoipa::path(
+    get,
+    path = "/offers/by-script",
+    tag = "offers",
+    params(ScriptQuery),
+    responses(
+        (status = 200, description = "Offer IDs with an unspent participant UTXO for the script", body = Vec<Uuid>),
+        (status = 400, description = "Invalid script_pubkey hex", body = ErrorResponse),
+        (status = 500, description = "Internal server error", body = ErrorResponse),
+    )
+)]
 #[tracing::instrument(name = "Getting offer ids by script", skip(state, query))]
 pub async fn get_ids_by_script(
     State(state): State<Arc<AppState>>,
     Query(query): Query<ScriptQuery>,
 ) -> Result<Json<Vec<Uuid>>, ApiError> {
-    let script_bytes = hex::decode(&query.script_pubkey)
-        .map_err(|_| ApiError::BadRequest("Invalid script_pubkey hex".to_string()))?;
+    let script_bytes = parse_script_pubkey(&query.script_pubkey)?;
 
     let ids = super::db::fetch_ids_by_script(&state.db, &script_bytes).await?;
 

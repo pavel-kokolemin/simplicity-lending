@@ -168,6 +168,21 @@ SQLX_OFFLINE=true cargo check
 
 ## API Reference
 
+### OpenAPI / Swagger
+
+When the API server is running:
+
+- **Swagger UI:** `http://localhost:8000/swagger-ui/`
+- **OpenAPI JSON:** `http://localhost:8000/api-docs/openapi.json`
+
+The spec is generated at build time from handler annotations (`utoipa`) and matches the current DTO shapes.
+
+Swagger UI is enabled by default (`swagger-ui` feature). Build without it for production-only deployments:
+
+```bash
+cargo build -p lending-indexer --no-default-features
+```
+
 ### Filtering Parameters (Query Params)
 
 The following parameters are available for `GET /offers` and for the `offers` list inside `GET /borrowers/by-script`:
