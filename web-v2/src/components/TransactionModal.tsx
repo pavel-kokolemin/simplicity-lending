@@ -1,6 +1,6 @@
-import { Spinner } from '@heroui/react'
+import { Spinner, Toast } from '@heroui/react'
 import type { MutationStatus } from '@tanstack/react-query'
-import { type ReactNode, useMemo } from 'react'
+import { type ReactNode, useEffect, useMemo } from 'react'
 
 import { getTxExplorerUrl } from '@/api/esplora/utils'
 import CheckIcon from '@/components/icons/CheckIcon'
@@ -54,17 +54,54 @@ function StatusIcon({ status }: { status: MutationStatus }) {
   )
 }
 
-export default function TransactionModal({
-  isOpen,
+export function TransactionStatusTitle({
+  status,
   eyebrow,
+}: {
+  status: MutationStatus
+  eyebrow: string
+}) {
+  return (
+    <span className='flex items-center gap-3'>
+      <StatusIcon status={status} />
+      <span className='flex flex-col'>
+        <span className='text-sm font-normal'>{eyebrow}</span>
+        <span>{TITLE[status]}</span>
+      </span>
+    </span>
+  )
+}
+
+interface TransactionBodyProps {
+  status: MutationStatus
+  summary?: TransactionSummaryRow[]
+  txid?: string | null
+  errorMessage?: string | null
+}
+
+function notifyTxConfirmed(txid: string, confirmations: number) {
+  Toast.toast.success('Transaction Confirmed', {
+    description: `${confirmations} confirmation${confirmations !== 1 ? 's' : ''} received.`,
+    actionProps: {
+      children: 'View',
+      onPress: () => window.open(getTxExplorerUrl(txid), '_blank', 'noopener'),
+    },
+  })
+}
+
+export function TransactionBody({
   status,
   summary = [],
   txid,
   errorMessage,
-  onClose,
-}: TransactionModalProps) {
-  const txStatus = useTxStatus(txid)
-  const isProcessing = status === 'pending'
+}: TransactionBodyProps) {
+  const { status: txStatus, confirmations } = useTxStatus(txid)
+
+  useEffect(() => {
+    if (txid && txStatus === 'finalized' && confirmations !== null) {
+      notifyTxConfirmed(txid, confirmations)
+    }
+  }, [txStatus, txid, confirmations])
 
   const rows = useMemo<TransactionSummaryRow[]>(
     () => [
@@ -93,11 +130,51 @@ export default function TransactionModal({
                     ? 'Confirmed'
                     : 'Pending…',
             },
+            ...(confirmations
+              ? [
+                  {
+                    label: 'Confirmations',
+                    value: `${confirmations} Confirmation${confirmations !== 1 ? 's' : ''}`,
+                  },
+                ]
+              : []),
           ]
         : []),
     ],
-    [summary, txid, txStatus],
+    [summary, txid, txStatus, confirmations],
   )
+
+  return (
+    <div className='flex flex-col gap-4'>
+      {rows.length > 0 && (
+        <div className='bg-surface-secondary flex flex-col rounded-xl p-6'>
+          {rows.map((row, index) => (
+            <div key={row.label} className={index > 0 ? 'border-separator mt-3 border-t pt-3' : ''}>
+              <div className='flex items-center justify-between text-sm'>
+                <span className='font-medium'>{row.label}</span>
+                <span className='font-medium'>{row.value}</span>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+      {status === 'error' && errorMessage && (
+        <p className='text-danger text-sm wrap-break-word'>{errorMessage}</p>
+      )}
+    </div>
+  )
+}
+
+export default function TransactionModal({
+  isOpen,
+  eyebrow,
+  status,
+  summary = [],
+  txid,
+  errorMessage,
+  onClose,
+}: TransactionModalProps) {
+  const isProcessing = status === 'pending'
 
   return (
     <UiModal
@@ -108,41 +185,14 @@ export default function TransactionModal({
       isDismissable={!isProcessing}
       showCloseButton={!isProcessing}
       size='md'
-      title={
-        <span className='flex items-center gap-3'>
-          <StatusIcon status={status} />
-          <span className='flex flex-col'>
-            <span className='text-sm font-normal'>{eyebrow}</span>
-            <span>{TITLE[status]}</span>
-          </span>
-        </span>
-      }
+      title={<TransactionStatusTitle status={status} eyebrow={eyebrow} />}
       footer={
         <UiButton className='w-full' variant='primary' isDisabled={isProcessing} onPress={onClose}>
           {status === 'success' ? 'Done' : 'Close'}
         </UiButton>
       }
     >
-      <div className='flex flex-col gap-4'>
-        {rows.length > 0 && (
-          <div className='bg-surface-secondary flex flex-col rounded-xl p-6'>
-            {rows.map((row, index) => (
-              <div
-                key={row.label}
-                className={index > 0 ? 'border-separator mt-3 border-t pt-3' : ''}
-              >
-                <div className='flex items-center justify-between text-sm'>
-                  <span className='font-medium'>{row.label}</span>
-                  <span className='font-medium'>{row.value}</span>
-                </div>
-              </div>
-            ))}
-          </div>
-        )}
-        {status === 'error' && errorMessage && (
-          <p className='text-danger text-sm wrap-break-word'>{errorMessage}</p>
-        )}
-      </div>
+      <TransactionBody status={status} summary={summary} txid={txid} errorMessage={errorMessage} />
     </UiModal>
   )
 }

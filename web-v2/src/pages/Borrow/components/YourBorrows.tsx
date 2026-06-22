@@ -2,7 +2,7 @@ import { Skeleton } from '@heroui/react'
 import { useState } from 'react'
 
 import { useBlockHeight } from '@/api/esplora/hooks'
-import { useBorrowersByScript } from '@/api/indexer/hooks'
+import { useBorrowerOffers } from '@/api/indexer/hooks'
 import CoinsIcon from '@/components/icons/CoinsIcon'
 import PlusIcon from '@/components/icons/PlusIcon'
 import OffersTable from '@/components/OffersTable'
@@ -10,9 +10,10 @@ import { UiButton } from '@/components/ui/UiButton'
 import { useBorrowerAccount } from '@/hooks/useBorrowerAccount'
 import { useWallet } from '@/providers/wallet/useWallet'
 
-import { BORROW_PAGE_SIZE } from '../constants'
 import CreateBorrowerAccountModal from './CreateBorrowerAccountModal'
 import CreateBorrowOfferModal from './CreateBorrowOfferModal'
+
+const BORROW_PAGE_SIZE = 10
 
 export default function YourBorrows() {
   const [page, setPage] = useState(1)
@@ -23,17 +24,19 @@ export default function YourBorrows() {
   const { hasAccount } = useBorrowerAccount()
 
   const offset = (page - 1) * BORROW_PAGE_SIZE
-  const borrowerQuery = useBorrowersByScript(scriptPubkey ?? '', {
+  const {
+    data: borrowerData,
+    isLoading,
+    refetch,
+  } = useBorrowerOffers(scriptPubkey ?? '', {
     limit: BORROW_PAGE_SIZE,
     offset,
   })
-  const blockHeightQuery = useBlockHeight()
+  const { data: currentBlockHeight } = useBlockHeight()
 
-  const offers = borrowerQuery.data?.offers.items ?? []
-  const totalOffers = borrowerQuery.data?.offers.total ?? 0
-  const currentBlockHeight = blockHeightQuery.data ?? 0
+  const offers = borrowerData?.items ?? []
+  const totalOffers = borrowerData?.total ?? 0
   const pageCount = Math.ceil(totalOffers / BORROW_PAGE_SIZE)
-  const isLoading = borrowerQuery.isLoading || blockHeightQuery.isLoading
 
   const handleCreateOffer = () => {
     if (hasAccount) setIsOfferModalOpen(true)
@@ -66,6 +69,7 @@ export default function YourBorrows() {
           page={page}
           pageCount={pageCount}
           onPageChange={setPage}
+          onActionSuccess={() => refetch()}
         />
       )}
 
@@ -77,8 +81,13 @@ export default function YourBorrows() {
       <CreateBorrowerAccountModal
         isOpen={isAccountModalOpen}
         onOpenChange={setIsAccountModalOpen}
+        onClose={refetch}
       />
-      <CreateBorrowOfferModal isOpen={isOfferModalOpen} onOpenChange={setIsOfferModalOpen} />
+      <CreateBorrowOfferModal
+        isOpen={isOfferModalOpen}
+        onOpenChange={setIsOfferModalOpen}
+        onClose={refetch}
+      />
     </section>
   )
 }

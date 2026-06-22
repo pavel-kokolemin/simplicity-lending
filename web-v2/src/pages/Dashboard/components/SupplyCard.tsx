@@ -6,7 +6,7 @@ import ArrowSquareUpIcon from '@/components/icons/ArrowSquareUpIcon'
 import { UiButton } from '@/components/ui/UiButton'
 import { NETWORK_CONFIG } from '@/constants/network-config'
 import { RoutePath } from '@/constants/routes'
-import { useSupply } from '@/hooks/useSupply'
+import { useLenderStats } from '@/hooks/useLenderStats'
 import { ErrorHandler } from '@/utils/errorHandler'
 import { formatAmount, truncateAddress } from '@/utils/format'
 
@@ -16,8 +16,7 @@ import { DataRow } from './DataRow'
 
 export function SupplyCard() {
   const navigate = useNavigate()
-  const { balance, stats, claimableOffers, isLoading, error, refetch } = useSupply()
-  const alertOffer = claimableOffers[0]
+  const { balance, stats, repaidOffer, isLoading, error, refetch } = useLenderStats()
 
   useEffect(() => {
     if (error) ErrorHandler.processWithRetry(error, refetch, 'Failed to load your supply.')
@@ -67,11 +66,11 @@ export function SupplyCard() {
         />
       </div>
 
-      {alertOffer && (
+      {repaidOffer && (
         <CardAlert
           variant='accent'
           title='Repayment Available'
-          description={`Loan #${truncateAddress(alertOffer.id)} has been repaid. You can now claim the repayment.`}
+          description={`Loan #${truncateAddress(repaidOffer.id)} has been repaid. You can now claim the repayment.`}
           actionLabel='Claim Now'
           isDisabled
         />

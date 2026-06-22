@@ -1,32 +1,36 @@
-import { normalizeHex } from '@/utils/hex'
+import type { OfferDetails } from '@/api/indexer/schemas'
 
-import type { OfferDetails, OfferParticipant, ParticipantType } from './schemas'
+const toOutpoint = (entry: { txid: string; vout: number }) => `${entry.txid}:${entry.vout}`
 
-export function filterOfferDetailsByParticipantRole(
-  offers: OfferDetails[],
-  scriptPubkeyHex: string,
-  role: ParticipantType,
-): OfferDetails[] {
-  const targetScript = normalizeHex(scriptPubkeyHex)
-  return offers.filter(offer =>
-    offer.participants.some(
-      participant =>
-        participant.participant_type === role &&
-        normalizeHex(participant.script_pubkey) === targetScript,
-    ),
-  )
+export function resolveCreateOfferNftOutpoints(offer: OfferDetails): {
+  lenderNft: string
+  borrowerNft: string
+} | null {
+  const lender = offer.participants.find(p => p.participant_type === 'lender')
+  const borrower = offer.participants.find(p => p.participant_type === 'borrower')
+  if (!lender || !borrower) return null
+  return {
+    lenderNft: toOutpoint(lender),
+    borrowerNft: toOutpoint(borrower),
+  }
 }
 
-export function getCurrentParticipantByRole(
-  history: OfferParticipant[],
-  role: ParticipantType,
-): OfferParticipant | null {
-  const unspentEntries = history.filter(
-    participant => participant.participant_type === role && participant.spent_txid === null,
-  )
-  if (unspentEntries.length === 0) return null
-  const sortedByHeight = [...unspentEntries].sort(
-    (left, right) => right.created_at_height - left.created_at_height,
-  )
-  return sortedByHeight[0] ?? null
+export function resolvePendingOutpoint(offer: OfferDetails): string | null {
+  const utxo = offer.utxos.find(u => u.utxo_type === 'pending_offer')
+  return utxo ? toOutpoint(utxo) : null
+}
+
+export function resolveActiveOutpoint(offer: OfferDetails): string | null {
+  const utxo = offer.utxos.find(u => u.utxo_type === 'active_offer')
+  return utxo ? toOutpoint(utxo) : null
+}
+
+export function resolveRepaymentOutpoint(offer: OfferDetails): string | null {
+  const utxo = offer.utxos.find(u => u.utxo_type === 'repayment')
+  return utxo ? toOutpoint(utxo) : null
+}
+
+export function resolveLenderNftOutpoint(offer: OfferDetails): string | null {
+  const lender = offer.participants.find(p => p.participant_type === 'lender')
+  return lender ? toOutpoint(lender) : null
 }
