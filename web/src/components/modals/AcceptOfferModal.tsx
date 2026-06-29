@@ -1,7 +1,8 @@
-import { useMutation } from '@tanstack/react-query'
+import { useMutation, useQuery } from '@tanstack/react-query'
 import { useMemo } from 'react'
 
-import { fetchFeeRateSatPerKvb } from '@/api/esplora/fee'
+import { FALLBACK_FEE_RATE_SAT_PER_KVB, fetchFeeRateSatPerKvb } from '@/api/esplora/fee'
+import { esploraQueryKeys } from '@/api/esplora/queryKeys'
 import { fetchOffer } from '@/api/indexer/methods'
 import type { OfferShort } from '@/api/indexer/schemas'
 import { resolveNftOutpoints, resolvePendingOutpoint } from '@/api/indexer/utils'
@@ -22,8 +23,7 @@ import { usePendingTransactions } from '@/providers/pendingTransactions/usePendi
 import { useWallet } from '@/providers/wallet/useWallet'
 import { LENDING_MAX_WEIGHT_TO_SATISFY } from '@/simplicity/lending/program'
 import { SCRIPT_AUTH_MAX_WEIGHT_TO_SATISFY } from '@/simplicity/script-auth/program'
-import { truncateAddress } from '@/utils/format'
-import { bpsToPercent, calcInterest } from '@/utils/offers'
+import { calcInterest, computeApr } from '@/utils/offers'
 
 const ACCEPT_WEIGHT_UNITS =
   LENDING_MAX_WEIGHT_TO_SATISFY.OfferAcceptance + SCRIPT_AUTH_MAX_WEIGHT_TO_SATISFY
@@ -42,7 +42,7 @@ export default function AcceptOfferModal({
   onSuccess,
 }: AcceptOfferModalProps) {
   const { principalAsset } = NETWORK_CONFIG
-  const { syncWallet, getBlindedWalletUtxos, scriptPubkey } = useWallet()
+  const { syncWallet, getBlindedWalletUtxos, scriptPubkey, balances } = useWallet()
   const { lwkNetwork } = useLwk()
   const { acceptOffer } = useAcceptOffer()
   const { addPendingTx } = usePendingTransactions()
@@ -100,8 +100,16 @@ export default function AcceptOfferModal({
     },
   })
 
-  const borrower = offer.participants.find(p => p.participant_type === 'borrower')
-  const title = `${truncateAddress(borrower?.script_pubkey || '')} Supply Offers`
+  const { data: feeRate = FALLBACK_FEE_RATE_SAT_PER_KVB } = useQuery({
+    queryKey: esploraQueryKeys.feeRate,
+    queryFn: () => fetchFeeRateSatPerKvb(),
+  })
+  const feeBuffer =
+    principalAsset.id === lwkNetwork.policyAsset().toString()
+      ? estimateFeeBudgetSats(ACCEPT_WEIGHT_UNITS, feeRate)
+      : 0n
+  const insufficientBalance =
+    BigInt(balances[principalAsset.id] ?? 0) < offer.principal_amount + feeBuffer
 
   const txSummary = useMemo(
     () => [
@@ -111,7 +119,10 @@ export default function AcceptOfferModal({
         label: 'Earn',
         value: formatPrincipalAmount(calcInterest(offer.principal_amount, offer.interest_rate)),
       },
-      { label: 'APR', value: bpsToPercent(offer.interest_rate) },
+      {
+        label: 'APR',
+        value: `${computeApr(offer.interest_rate, offer.loan_expiration_height - offer.created_at_height).toFixed(2)}%`,
+      },
     ],
     [offer, formatCollateralDisplay, formatPrincipalAmount],
   )
@@ -119,13 +130,14 @@ export default function AcceptOfferModal({
   return (
     <OfferActionShell
       isOpen={isOpen}
-      title={title}
+      title='Accept Offer'
       chip={<OfferStatusChip status={offer.status} />}
       action={{
         label: 'Accept & Supply',
         eyebrow: 'Accept Offer',
         summary: txSummary,
         status,
+        disabled: insufficientBalance,
         txid: data?.txid,
         error: error?.message,
         onConfirm: () => mutate(),
@@ -137,6 +149,11 @@ export default function AcceptOfferModal({
       onSuccess={onSuccess}
     >
       <OfferDetailsBody offer={offer} />
+      {insufficientBalance && (
+        <div className='rounded-2xl border border-warning/30 bg-warning/10 px-4 py-3 text-sm text-warning'>
+          Insufficient {principalAsset.symbol} balance to accept this offer.
+        </div>
+      )}
     </OfferActionShell>
   )
 }

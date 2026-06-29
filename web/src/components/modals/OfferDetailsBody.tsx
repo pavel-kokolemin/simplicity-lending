@@ -17,7 +17,7 @@ interface OfferDetailsBodyProps {
 
 export default function OfferDetailsBody({ offer, highlightTerm }: OfferDetailsBodyProps) {
   const { principalAsset } = NETWORK_CONFIG
-  const { balances } = useWallet()
+  const { balances, isReady } = useWallet()
   const { formatCollateralDisplay, formatPrincipalAmount } = useFormatAmount()
   const { data: currentBlockHeight } = useBlockHeight()
 
@@ -27,6 +27,7 @@ export default function OfferDetailsBody({ offer, highlightTerm }: OfferDetailsB
     const borrower = offer.participants.find(p => p.participant_type === 'borrower')
 
     const rows: DetailRow[] = [
+      { label: 'Offer ID', value: truncateAddress(offer.id), copyValue: offer.id },
       { label: 'Collateral Amount', value: formatCollateralDisplay(offer.collateral_amount) },
       { label: 'Loan Amount', value: formatPrincipalAmount(offer.principal_amount) },
       { label: 'Expected Earning', value: formatPrincipalAmount(interest) },
@@ -55,7 +56,9 @@ export default function OfferDetailsBody({ offer, highlightTerm }: OfferDetailsB
 
   return (
     <div className='flex flex-col gap-6'>
-      <BalanceCard asset={principalAsset} amount={BigInt(balances[principalAsset.id] ?? 0)} />
+      {isReady && (
+        <BalanceCard asset={principalAsset} amount={BigInt(balances[principalAsset.id] ?? 0)} />
+      )}
       <DetailsPanel title='Loan info' rows={loanInfoRows} />
       <DetailsPanel title='Term' rows={termRows} bordered={highlightTerm} />
     </div>

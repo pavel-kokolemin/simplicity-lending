@@ -1,8 +1,9 @@
 import { Chip } from '@heroui/react'
-import { useMutation } from '@tanstack/react-query'
+import { useMutation, useQuery } from '@tanstack/react-query'
 import { useMemo } from 'react'
 
-import { fetchFeeRateSatPerKvb } from '@/api/esplora/fee'
+import { FALLBACK_FEE_RATE_SAT_PER_KVB, fetchFeeRateSatPerKvb } from '@/api/esplora/fee'
+import { esploraQueryKeys } from '@/api/esplora/queryKeys'
 import { fetchOffer } from '@/api/indexer/methods'
 import type { OfferShort } from '@/api/indexer/schemas'
 import { resolveActiveOutpoint, resolveBorrowerNftOutpoint } from '@/api/indexer/utils'
@@ -22,7 +23,6 @@ import { useLwk } from '@/providers/lwk/useLwk'
 import { usePendingTransactions } from '@/providers/pendingTransactions/usePendingTransactions'
 import { useWallet } from '@/providers/wallet/useWallet'
 import { LENDING_MAX_WEIGHT_TO_SATISFY } from '@/simplicity/lending/program'
-import { truncateAddress } from '@/utils/format'
 import { calcInterest } from '@/utils/offers'
 
 const REPAY_WEIGHT_UNITS =
@@ -42,7 +42,7 @@ export default function RepayOfferModal({
   onSuccess,
 }: RepayOfferModalProps) {
   const { principalAsset } = NETWORK_CONFIG
-  const { syncWallet, getBlindedWalletUtxos, scriptPubkey } = useWallet()
+  const { syncWallet, getBlindedWalletUtxos, scriptPubkey, balances } = useWallet()
   const { lwkNetwork } = useLwk()
   const { repayOffer } = useRepayOffer()
   const { addPendingTx } = usePendingTransactions()
@@ -102,6 +102,18 @@ export default function RepayOfferModal({
     },
   })
 
+  const totalToRepay =
+    offer.principal_amount + calcInterest(offer.principal_amount, offer.interest_rate)
+  const { data: feeRate = FALLBACK_FEE_RATE_SAT_PER_KVB } = useQuery({
+    queryKey: esploraQueryKeys.feeRate,
+    queryFn: () => fetchFeeRateSatPerKvb(),
+  })
+  const feeBuffer =
+    principalAsset.id === lwkNetwork.policyAsset().toString()
+      ? estimateFeeBudgetSats(REPAY_WEIGHT_UNITS, feeRate)
+      : 0n
+  const insufficientBalance = BigInt(balances[principalAsset.id] ?? 0) < totalToRepay + feeBuffer
+
   const txSummary = useMemo(() => {
     const interest = calcInterest(offer.principal_amount, offer.interest_rate)
     return [
@@ -118,7 +130,7 @@ export default function RepayOfferModal({
   return (
     <OfferActionShell
       isOpen={isOpen}
-      title={`#${truncateAddress(offer.id)} - Repay`}
+      title='Repay Offer'
       chip={
         <Chip color='warning' variant='soft' size='sm'>
           Repay
@@ -129,6 +141,7 @@ export default function RepayOfferModal({
         eyebrow: 'Repay Loan',
         summary: txSummary,
         status,
+        disabled: insufficientBalance,
         txid: data?.txid,
         error: error?.message,
         onConfirm: () => mutate(),
@@ -140,6 +153,11 @@ export default function RepayOfferModal({
       onSuccess={onSuccess}
     >
       <OfferDetailsBody offer={offer} />
+      {insufficientBalance && (
+        <div className='rounded-2xl border border-warning/30 bg-warning/10 px-4 py-3 text-sm text-warning'>
+          Insufficient {principalAsset.symbol} balance to repay this loan.
+        </div>
+      )}
     </OfferActionShell>
   )
 }
