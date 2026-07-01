@@ -6,6 +6,7 @@ import { UiButton } from '@/components/ui/UiButton'
 import { UiModal } from '@/components/ui/UiModal'
 import { useBorrowerAccount } from '@/hooks/useBorrowerAccount'
 import { useFreezeViewWhileOpen } from '@/hooks/useFreezeViewWhileOpen'
+import { useStandardTransactionFlow } from '@/hooks/useStandardTransactionFlow'
 import { usePendingTransactions } from '@/providers/pendingTransactions/usePendingTransactions'
 
 interface CreateBorrowerAccountModalProps {
@@ -20,9 +21,10 @@ export default function CreateBorrowerAccountModal({
   onClose,
 }: CreateBorrowerAccountModalProps) {
   const { createBorrowerAccount, refetchFactory, scriptPubkey } = useBorrowerAccount()
+  const runStandardTransactionFlow = useStandardTransactionFlow()
   const { addPendingTx, addSurfaceToast } = usePendingTransactions()
-  const { mutate, reset, data, error, status } = useMutation({
-    mutationFn: createBorrowerAccount,
+  const { mutate, reset, data, status } = useMutation({
+    mutationFn: () => runStandardTransactionFlow(createBorrowerAccount),
     onSuccess: result => {
       void addPendingTx({
         txid: result.txid,
@@ -33,11 +35,9 @@ export default function CreateBorrowerAccountModal({
   })
 
   const liveTxid = data?.txid ?? null
-  const liveErrorMessage = error?.message
   const view = useFreezeViewWhileOpen(isOpen, {
     status,
     txid: liveTxid,
-    errorMessage: liveErrorMessage,
   })
 
   const handleClose = () => {
@@ -55,7 +55,6 @@ export default function CreateBorrowerAccountModal({
         eyebrow='New Borrower Account'
         status={view.status}
         txid={view.txid}
-        errorMessage={view.errorMessage}
         onClose={handleClose}
       />
     )
@@ -80,7 +79,12 @@ export default function CreateBorrowerAccountModal({
           <UiButton variant='secondary' onPress={handleClose}>
             Cancel
           </UiButton>
-          <UiButton variant='primary' onPress={() => mutate()}>
+          <UiButton
+            variant='primary'
+            onPress={() => {
+              mutate()
+            }}
+          >
             Create
           </UiButton>
         </>

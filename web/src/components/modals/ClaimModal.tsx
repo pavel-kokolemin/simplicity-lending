@@ -10,6 +10,7 @@ import OfferActionShell from '@/components/modals/OfferActionShell'
 import OfferDetailsBody from '@/components/modals/OfferDetailsBody'
 import { NETWORK_CONFIG } from '@/constants/network-config'
 import { useLenderVaultClaim } from '@/hooks/useLenderVaultClaim'
+import { useStandardTransactionFlow } from '@/hooks/useStandardTransactionFlow'
 import {
   estimateFeeBudgetSats,
   EXPLICIT_SIGNATURE_MAX_WEIGHT_TO_SATISFY,
@@ -38,37 +39,39 @@ export default function ClaimModal({ isOpen, offer, onClose, onSuccess }: ClaimM
   const { syncWallet, getBlindedWalletUtxos, scriptPubkey } = useWallet()
   const { lwkNetwork } = useLwk()
   const { claimLenderVault } = useLenderVaultClaim()
+  const runStandardTransactionFlow = useStandardTransactionFlow()
   const { addPendingTx } = usePendingTransactions()
 
-  const claimVault = async () => {
-    const fullOffer = await fetchOffer(offer.id)
-    const vaultOutpoint = resolveRepaymentOutpoint(fullOffer)
-    if (!vaultOutpoint) throw new Error('Lender vault UTXO not found')
+  const claimVault = () =>
+    runStandardTransactionFlow(async () => {
+      const fullOffer = await fetchOffer(offer.id)
+      const vaultOutpoint = resolveRepaymentOutpoint(fullOffer)
+      if (!vaultOutpoint) throw new Error('Lender vault UTXO not found')
 
-    const lenderNftOutpoint = resolveLenderNftOutpoint(fullOffer)
-    if (!lenderNftOutpoint) throw new Error('Lender NFT UTXO not found')
+      const lenderNftOutpoint = resolveLenderNftOutpoint(fullOffer)
+      if (!lenderNftOutpoint) throw new Error('Lender NFT UTXO not found')
 
-    await syncWallet()
-    const [blindedWalletUtxos, feeRate] = await Promise.all([
-      getBlindedWalletUtxos(),
-      fetchFeeRateSatPerKvb(),
-    ])
-    const feeBudgetSats = estimateFeeBudgetSats(CLAIM_WEIGHT_UNITS, feeRate)
-    const feeUtxos = selectFeeUtxos(
-      blindedWalletUtxos,
-      lwkNetwork.policyAsset(),
-      feeBudgetSats,
-      feeRate,
-    )
+      await syncWallet()
+      const [blindedWalletUtxos, feeRate] = await Promise.all([
+        getBlindedWalletUtxos(),
+        fetchFeeRateSatPerKvb(),
+      ])
+      const feeBudgetSats = estimateFeeBudgetSats(CLAIM_WEIGHT_UNITS, feeRate)
+      const feeUtxos = selectFeeUtxos(
+        blindedWalletUtxos,
+        lwkNetwork.policyAsset(),
+        feeBudgetSats,
+        feeRate,
+      )
 
-    return claimLenderVault({
-      lenderVaultOutpoint: vaultOutpoint,
-      lenderNftOutpoint,
-      feeOutpoints: feeUtxos.map(utxoToOutpointString),
+      return claimLenderVault({
+        lenderVaultOutpoint: vaultOutpoint,
+        lenderNftOutpoint,
+        feeOutpoints: feeUtxos.map(utxoToOutpointString),
+      })
     })
-  }
 
-  const { mutate, reset, data, error, status } = useMutation({
+  const { mutate, reset, data, status } = useMutation({
     mutationFn: claimVault,
     onSuccess: result => {
       void addPendingTx({
@@ -115,7 +118,6 @@ export default function ClaimModal({ isOpen, offer, onClose, onSuccess }: ClaimM
         summary: txSummary,
         status,
         txid: data?.txid,
-        error: error?.message,
         onConfirm: () => mutate(),
       }}
       onClose={() => {

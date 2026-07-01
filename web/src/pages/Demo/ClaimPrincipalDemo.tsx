@@ -5,7 +5,8 @@ import { z as zod } from 'zod'
 
 import { UiButton } from '@/components/ui/UiButton'
 import { UiTextField } from '@/components/ui/UiTextField'
-import { type ClaimPrincipalResult, useClaimPrincipal } from '@/hooks/useClaimPrincipal'
+import { type ClaimPrincipalSummary, useClaimPrincipal } from '@/hooks/useClaimPrincipal'
+import { useStandardTransactionFlow } from '@/hooks/useStandardTransactionFlow'
 import { useTxStatus } from '@/hooks/useTxStatus'
 import { isConfirmedWalletUtxo, isPolicyAssetUtxo } from '@/lwk/utxo'
 import { useLwk } from '@/providers/lwk/useLwk'
@@ -68,7 +69,7 @@ const claimPrincipalFormResolver: Resolver<ClaimPrincipalForm> = async values =>
 interface BroadcastState {
   busy: boolean
   error: string | null
-  result: ClaimPrincipalResult | null
+  result: { txid: string; summary: ClaimPrincipalSummary } | null
 }
 
 interface WalletUtxosState {
@@ -94,6 +95,7 @@ export default function ClaimPrincipalDemo() {
   const { lwkNetwork } = useLwk()
   const { connectionStatus, getBlindedWalletUtxos, syncing, syncWallet } = useWallet()
   const { claimPrincipal } = useClaimPrincipal()
+  const runStandardTransactionFlow = useStandardTransactionFlow()
   const { control, handleSubmit } = useForm<ClaimPrincipalForm>({
     defaultValues: EMPTY_FORM,
     mode: 'onSubmit',
@@ -158,7 +160,9 @@ export default function ClaimPrincipalDemo() {
       if (!result.success) {
         throw new Error(result.error.issues.map(issue => issue.message).join('; '))
       }
-      setState({ busy: false, error: null, result: await claimPrincipal(result.data) })
+      const { txid, summary } = await runStandardTransactionFlow(() => claimPrincipal(result.data))
+
+      setState({ busy: false, error: null, result: { txid, summary } })
     } catch (err) {
       setState({
         busy: false,

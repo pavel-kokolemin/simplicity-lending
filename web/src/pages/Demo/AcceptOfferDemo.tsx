@@ -6,7 +6,8 @@ import { z as zod } from 'zod'
 import { UiButton } from '@/components/ui/UiButton'
 import { UiTextField } from '@/components/ui/UiTextField'
 import { NETWORK_CONFIG } from '@/constants/network-config'
-import { type AcceptOfferResult, useAcceptOffer } from '@/hooks/useAcceptOffer'
+import { type AcceptOfferSummary, useAcceptOffer } from '@/hooks/useAcceptOffer'
+import { useStandardTransactionFlow } from '@/hooks/useStandardTransactionFlow'
 import { useTxStatus } from '@/hooks/useTxStatus'
 import { isConfirmedWalletUtxo, isPolicyAssetUtxo, utxoToOutpointString } from '@/lwk/utxo'
 import { useLwk } from '@/providers/lwk/useLwk'
@@ -69,7 +70,7 @@ const acceptOfferFormResolver: Resolver<AcceptOfferForm> = async values => {
 interface BroadcastState {
   busy: boolean
   error: string | null
-  result: AcceptOfferResult | null
+  result: { txid: string; summary: AcceptOfferSummary } | null
 }
 
 interface WalletUtxosState {
@@ -96,6 +97,7 @@ export default function AcceptOfferDemo() {
   const { lwkNetwork } = useLwk()
   const { connectionStatus, getBlindedWalletUtxos, syncing, syncWallet } = useWallet()
   const { acceptOffer } = useAcceptOffer()
+  const runStandardTransactionFlow = useStandardTransactionFlow()
   const { control, handleSubmit } = useForm<AcceptOfferForm>({
     defaultValues: EMPTY_FORM,
     mode: 'onSubmit',
@@ -183,11 +185,9 @@ export default function AcceptOfferDemo() {
         throw new Error(result.error.issues.map(issue => issue.message).join('; '))
       }
 
-      setState({
-        busy: false,
-        error: null,
-        result: await acceptOffer(result.data),
-      })
+      const { txid, summary } = await runStandardTransactionFlow(() => acceptOffer(result.data))
+
+      setState({ busy: false, error: null, result: { txid, summary } })
     } catch (err) {
       setState({
         busy: false,

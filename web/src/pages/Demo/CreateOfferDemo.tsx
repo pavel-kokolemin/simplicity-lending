@@ -6,7 +6,8 @@ import { z as zod } from 'zod'
 import { UiButton } from '@/components/ui/UiButton'
 import { UiTextField } from '@/components/ui/UiTextField'
 import { NETWORK_CONFIG } from '@/constants/network-config'
-import { type CreateOfferResult, useCreateOffer } from '@/hooks/useCreateOffer'
+import { type CreateOfferSummary, useCreateOffer } from '@/hooks/useCreateOffer'
+import { useStandardTransactionFlow } from '@/hooks/useStandardTransactionFlow'
 import { useTxStatus } from '@/hooks/useTxStatus'
 import { isConfirmedWalletUtxo, isPolicyAssetUtxo } from '@/lwk/utxo'
 import { useLwk } from '@/providers/lwk/useLwk'
@@ -94,7 +95,7 @@ const createOfferFormResolver: Resolver<CreateOfferForm> = async values => {
 interface BroadcastState {
   busy: boolean
   error: string | null
-  summary: CreateOfferResult['summary'] | null
+  summary: CreateOfferSummary | null
   txid: string | null
 }
 
@@ -135,6 +136,7 @@ export default function CreateOfferDemo() {
   const { lwkNetwork } = useLwk()
   const { connectionStatus, syncing, syncWallet, getBlindedWalletUtxos } = useWallet()
   const { createOffer } = useCreateOffer()
+  const runStandardTransactionFlow = useStandardTransactionFlow()
   const { control, handleSubmit } = useForm<CreateOfferForm>({
     defaultValues: EMPTY_FORM,
     mode: 'onSubmit',
@@ -201,7 +203,7 @@ export default function CreateOfferDemo() {
       if (!result.success) {
         throw new Error(result.error.issues.map(issue => issue.message).join('; '))
       }
-      const { txid, summary } = await createOffer(result.data)
+      const { txid, summary } = await runStandardTransactionFlow(() => createOffer(result.data))
       setState({ busy: false, error: null, txid, summary })
     } catch (err) {
       setState(current => ({

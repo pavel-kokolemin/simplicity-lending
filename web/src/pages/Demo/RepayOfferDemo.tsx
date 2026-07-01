@@ -6,7 +6,8 @@ import { z as zod } from 'zod'
 import { UiButton } from '@/components/ui/UiButton'
 import { UiTextField } from '@/components/ui/UiTextField'
 import { NETWORK_CONFIG } from '@/constants/network-config'
-import { type RepayOfferResult, useRepayOffer } from '@/hooks/useRepayOffer'
+import { type RepayOfferSummary, useRepayOffer } from '@/hooks/useRepayOffer'
+import { useStandardTransactionFlow } from '@/hooks/useStandardTransactionFlow'
 import { useTxStatus } from '@/hooks/useTxStatus'
 import { isConfirmedWalletUtxo, isPolicyAssetUtxo, utxoToOutpointString } from '@/lwk/utxo'
 import { useLwk } from '@/providers/lwk/useLwk'
@@ -69,7 +70,7 @@ const repayOfferFormResolver: Resolver<RepayOfferForm> = async values => {
 interface BroadcastState {
   busy: boolean
   error: string | null
-  result: RepayOfferResult | null
+  result: { txid: string; summary: RepayOfferSummary } | null
 }
 
 interface WalletUtxosState {
@@ -95,6 +96,7 @@ export default function RepayOfferDemo() {
   const { lwkNetwork } = useLwk()
   const { connectionStatus, getBlindedWalletUtxos, syncing, syncWallet } = useWallet()
   const { repayOffer } = useRepayOffer()
+  const runStandardTransactionFlow = useStandardTransactionFlow()
   const { control, handleSubmit } = useForm<RepayOfferForm>({
     defaultValues: EMPTY_FORM,
     mode: 'onSubmit',
@@ -181,11 +183,9 @@ export default function RepayOfferDemo() {
         throw new Error(result.error.issues.map(issue => issue.message).join('; '))
       }
 
-      setState({
-        busy: false,
-        error: null,
-        result: await repayOffer(result.data),
-      })
+      const { txid, summary } = await runStandardTransactionFlow(() => repayOffer(result.data))
+
+      setState({ busy: false, error: null, result: { txid, summary } })
     } catch (err) {
       setState({
         busy: false,

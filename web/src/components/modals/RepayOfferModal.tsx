@@ -12,6 +12,7 @@ import OfferDetailsBody from '@/components/modals/OfferDetailsBody'
 import { NETWORK_CONFIG } from '@/constants/network-config'
 import { useFormatAmount } from '@/hooks/useFormatAmount'
 import { useRepayOffer } from '@/hooks/useRepayOffer'
+import { useStandardTransactionFlow } from '@/hooks/useStandardTransactionFlow'
 import {
   estimateFeeBudgetSats,
   EXPLICIT_SIGNATURE_MAX_WEIGHT_TO_SATISFY,
@@ -45,50 +46,52 @@ export default function RepayOfferModal({
   const { syncWallet, getBlindedWalletUtxos, scriptPubkey, balances } = useWallet()
   const { lwkNetwork } = useLwk()
   const { repayOffer } = useRepayOffer()
+  const runStandardTransactionFlow = useStandardTransactionFlow()
   const { addPendingTx } = usePendingTransactions()
   const { formatCollateralDisplay, formatPrincipalAmount } = useFormatAmount()
 
-  const repayBorrowOffer = async () => {
-    const fullOffer = await fetchOffer(offer.id)
-    const activeOfferOutpoint = resolveActiveOutpoint(fullOffer)
-    if (!activeOfferOutpoint) throw new Error('Active offer UTXO not found')
+  const repayBorrowOffer = () =>
+    runStandardTransactionFlow(async () => {
+      const fullOffer = await fetchOffer(offer.id)
+      const activeOfferOutpoint = resolveActiveOutpoint(fullOffer)
+      if (!activeOfferOutpoint) throw new Error('Active offer UTXO not found')
 
-    const borrowerNftOutpoint = resolveBorrowerNftOutpoint(fullOffer)
-    if (!borrowerNftOutpoint) throw new Error('Borrower NFT UTXO not found')
+      const borrowerNftOutpoint = resolveBorrowerNftOutpoint(fullOffer)
+      if (!borrowerNftOutpoint) throw new Error('Borrower NFT UTXO not found')
 
-    const totalToRepay =
-      offer.principal_amount + calcInterest(offer.principal_amount, offer.interest_rate)
+      const totalToRepay =
+        offer.principal_amount + calcInterest(offer.principal_amount, offer.interest_rate)
 
-    await syncWallet()
-    const [blindedWalletUtxos, feeRate] = await Promise.all([
-      getBlindedWalletUtxos(),
-      fetchFeeRateSatPerKvb(),
-    ])
+      await syncWallet()
+      const [blindedWalletUtxos, feeRate] = await Promise.all([
+        getBlindedWalletUtxos(),
+        fetchFeeRateSatPerKvb(),
+      ])
 
-    const principalUtxos = selectAssetUtxos(
-      blindedWalletUtxos,
-      principalAsset.id,
-      totalToRepay,
-      principalAsset.symbol,
-    )
+      const principalUtxos = selectAssetUtxos(
+        blindedWalletUtxos,
+        principalAsset.id,
+        totalToRepay,
+        principalAsset.symbol,
+      )
 
-    const feeBudgetSats = estimateFeeBudgetSats(REPAY_WEIGHT_UNITS, feeRate)
-    const feeUtxos = selectFeeUtxos(
-      blindedWalletUtxos,
-      lwkNetwork.policyAsset(),
-      feeBudgetSats,
-      feeRate,
-    )
+      const feeBudgetSats = estimateFeeBudgetSats(REPAY_WEIGHT_UNITS, feeRate)
+      const feeUtxos = selectFeeUtxos(
+        blindedWalletUtxos,
+        lwkNetwork.policyAsset(),
+        feeBudgetSats,
+        feeRate,
+      )
 
-    return repayOffer({
-      activeOfferOutpoint,
-      borrowerNftOutpoint,
-      principalOutpoints: principalUtxos.map(utxoToOutpointString),
-      feeOutpoints: feeUtxos.map(utxoToOutpointString),
+      return repayOffer({
+        activeOfferOutpoint,
+        borrowerNftOutpoint,
+        principalOutpoints: principalUtxos.map(utxoToOutpointString),
+        feeOutpoints: feeUtxos.map(utxoToOutpointString),
+      })
     })
-  }
 
-  const { mutate, reset, data, error, status } = useMutation({
+  const { mutate, reset, data, status } = useMutation({
     mutationFn: repayBorrowOffer,
     onSuccess: result => {
       void addPendingTx({
@@ -143,7 +146,6 @@ export default function RepayOfferModal({
         status,
         disabled: insufficientBalance,
         txid: data?.txid,
-        error: error?.message,
         onConfirm: () => mutate(),
       }}
       onClose={() => {

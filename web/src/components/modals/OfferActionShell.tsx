@@ -19,7 +19,6 @@ export interface OfferAction {
   status: MutationStatus
   disabled?: boolean
   txid?: string
-  error?: string
   onConfirm: () => void
 }
 
@@ -39,7 +38,6 @@ interface ActionView {
   eyebrow: string
   summary: TransactionSummaryRow[]
   txid?: string
-  error?: string
 }
 
 interface ClosingSnapshot {
@@ -56,7 +54,6 @@ function deriveView(action: OfferAction | undefined): ActionView {
     eyebrow: action?.eyebrow ?? '',
     summary: action?.summary ?? EMPTY_SUMMARY,
     txid: action?.txid,
-    error: action?.error,
   }
 }
 
@@ -145,7 +142,6 @@ export default function OfferActionShell({
             status={view.status}
             summary={view.summary}
             txid={view.txid}
-            errorMessage={view.error}
             txStatus={txStatus}
             confirmations={confirmations}
           />

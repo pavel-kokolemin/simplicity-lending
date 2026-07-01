@@ -1,6 +1,7 @@
 import { useState } from 'react'
 
-import { type BorrowerAccountCreationResult, useBorrowerAccount } from '@/hooks/useBorrowerAccount'
+import { type BorrowerAccountCreationSummary, useBorrowerAccount } from '@/hooks/useBorrowerAccount'
+import { useStandardTransactionFlow } from '@/hooks/useStandardTransactionFlow'
 import { useTxStatus } from '@/hooks/useTxStatus'
 import { useWallet } from '@/providers/wallet/useWallet'
 
@@ -17,9 +18,12 @@ const INITIAL_STATE = { busy: false, error: null, result: null }
 export default function CreateBorrowerAccountDemo() {
   const { connectionStatus } = useWallet()
   const { createBorrowerAccount, removeBorrowerAccount } = useBorrowerAccount()
+  const runStandardTransactionFlow = useStandardTransactionFlow()
 
   const [createState, setCreateState] =
-    useState<BroadcastState<BorrowerAccountCreationResult>>(INITIAL_STATE)
+    useState<BroadcastState<{ txid: string; summary: BorrowerAccountCreationSummary }>>(
+      INITIAL_STATE,
+    )
   const [removeState, setRemoveState] = useState<BroadcastState<null>>(INITIAL_STATE)
 
   const { status: createTxStatus } = useTxStatus(createState.result?.txid ?? null)
@@ -28,8 +32,9 @@ export default function CreateBorrowerAccountDemo() {
   const handleCreate = async () => {
     setCreateState({ busy: true, error: null, result: null })
     try {
-      const result = await createBorrowerAccount()
-      setCreateState({ busy: false, error: null, result })
+      const { txid, summary } = await runStandardTransactionFlow(createBorrowerAccount)
+
+      setCreateState({ busy: false, error: null, result: { txid, summary } })
     } catch (err) {
       setCreateState({
         busy: false,
@@ -97,7 +102,7 @@ export default function CreateBorrowerAccountDemo() {
               title='Borrower Account Created'
               txid={createState.result.txid}
               txStatus={createTxStatus}
-              detail={createState.result}
+              detail={createState.result.summary}
             />
           )}
           {removeState.result !== undefined && removeState.error && (

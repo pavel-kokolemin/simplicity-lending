@@ -10,6 +10,7 @@ import OfferActionShell from '@/components/modals/OfferActionShell'
 import OfferDetailsBody from '@/components/modals/OfferDetailsBody'
 import { useCancelOffer } from '@/hooks/useCancelOffer'
 import { useFormatAmount } from '@/hooks/useFormatAmount'
+import { useStandardTransactionFlow } from '@/hooks/useStandardTransactionFlow'
 import {
   estimateFeeBudgetSats,
   EXPLICIT_SIGNATURE_MAX_WEIGHT_TO_SATISFY,
@@ -43,44 +44,46 @@ export default function CancelOfferModal({
   const { syncWallet, getBlindedWalletUtxos, getReceiveAddress, scriptPubkey } = useWallet()
   const { lwkNetwork } = useLwk()
   const { cancelOffer } = useCancelOffer()
+  const runStandardTransactionFlow = useStandardTransactionFlow()
   const { addPendingTx } = usePendingTransactions()
   const { formatCollateralDisplay } = useFormatAmount()
 
-  const cancelBorrowOffer = async () => {
-    const fullOffer = await fetchOffer(offer.id)
-    const pendingOfferOutpoint = resolvePendingOutpoint(fullOffer)
-    if (!pendingOfferOutpoint) throw new Error('Pending offer UTXO not found')
+  const cancelBorrowOffer = () =>
+    runStandardTransactionFlow(async () => {
+      const fullOffer = await fetchOffer(offer.id)
+      const pendingOfferOutpoint = resolvePendingOutpoint(fullOffer)
+      if (!pendingOfferOutpoint) throw new Error('Pending offer UTXO not found')
 
-    const nftOutpoints = resolveNftOutpoints(fullOffer)
-    if (!nftOutpoints) throw new Error('Offer NFT participants not found')
+      const nftOutpoints = resolveNftOutpoints(fullOffer)
+      if (!nftOutpoints) throw new Error('Offer NFT participants not found')
 
-    const collateralRecipientAddress = await getReceiveAddress()
-    if (!collateralRecipientAddress) throw new Error('Missing wallet receive address')
+      const collateralRecipientAddress = await getReceiveAddress()
+      if (!collateralRecipientAddress) throw new Error('Missing wallet receive address')
 
-    await syncWallet()
-    const [blindedWalletUtxos, feeRate] = await Promise.all([
-      getBlindedWalletUtxos(),
-      fetchFeeRateSatPerKvb(),
-    ])
+      await syncWallet()
+      const [blindedWalletUtxos, feeRate] = await Promise.all([
+        getBlindedWalletUtxos(),
+        fetchFeeRateSatPerKvb(),
+      ])
 
-    const feeBudgetSats = estimateFeeBudgetSats(CANCEL_WEIGHT_UNITS, feeRate)
-    const feeUtxos = selectFeeUtxos(
-      blindedWalletUtxos,
-      lwkNetwork.policyAsset(),
-      feeBudgetSats,
-      feeRate,
-    )
+      const feeBudgetSats = estimateFeeBudgetSats(CANCEL_WEIGHT_UNITS, feeRate)
+      const feeUtxos = selectFeeUtxos(
+        blindedWalletUtxos,
+        lwkNetwork.policyAsset(),
+        feeBudgetSats,
+        feeRate,
+      )
 
-    return cancelOffer({
-      pendingOfferOutpoint,
-      lenderNftOutpoint: nftOutpoints.lenderNft,
-      borrowerNftOutpoint: nftOutpoints.borrowerNft,
-      collateralRecipientAddress,
-      feeOutpoints: feeUtxos.map(utxoToOutpointString),
+      return cancelOffer({
+        pendingOfferOutpoint,
+        lenderNftOutpoint: nftOutpoints.lenderNft,
+        borrowerNftOutpoint: nftOutpoints.borrowerNft,
+        collateralRecipientAddress,
+        feeOutpoints: feeUtxos.map(utxoToOutpointString),
+      })
     })
-  }
 
-  const { mutate, reset, data, error, status } = useMutation({
+  const { mutate, reset, data, status } = useMutation({
     mutationFn: cancelBorrowOffer,
     onSuccess: result => {
       void addPendingTx({
@@ -117,7 +120,6 @@ export default function CancelOfferModal({
         summary: txSummary,
         status,
         txid: data?.txid,
-        error: error?.message,
         onConfirm: () => mutate(),
       }}
       onClose={() => {

@@ -10,6 +10,7 @@ import OfferActionShell from '@/components/modals/OfferActionShell'
 import OfferDetailsBody from '@/components/modals/OfferDetailsBody'
 import { NETWORK_CONFIG } from '@/constants/network-config'
 import { useClaimPrincipal } from '@/hooks/useClaimPrincipal'
+import { useStandardTransactionFlow } from '@/hooks/useStandardTransactionFlow'
 import {
   estimateFeeBudgetSats,
   EXPLICIT_SIGNATURE_MAX_WEIGHT_TO_SATISFY,
@@ -42,38 +43,40 @@ export default function ClaimPrincipalModal({
   const { syncWallet, getBlindedWalletUtxos, scriptPubkey } = useWallet()
   const { lwkNetwork } = useLwk()
   const { claimPrincipal } = useClaimPrincipal()
+  const runStandardTransactionFlow = useStandardTransactionFlow()
   const { addPendingTx } = usePendingTransactions()
 
-  const claimBorrowerPrincipal = async () => {
-    if (!offer.borrower_principal_utxo) throw new Error('Borrower principal UTXO not found')
-    const principalOutpoint = toOutpoint(offer.borrower_principal_utxo)
+  const claimBorrowerPrincipal = () =>
+    runStandardTransactionFlow(async () => {
+      if (!offer.borrower_principal_utxo) throw new Error('Borrower principal UTXO not found')
+      const principalOutpoint = toOutpoint(offer.borrower_principal_utxo)
 
-    const fullOffer = await fetchOffer(offer.id)
-    const nftOutpoints = resolveNftOutpoints(fullOffer)
-    if (!nftOutpoints) throw new Error('Offer NFT participants not found')
+      const fullOffer = await fetchOffer(offer.id)
+      const nftOutpoints = resolveNftOutpoints(fullOffer)
+      if (!nftOutpoints) throw new Error('Offer NFT participants not found')
 
-    await syncWallet()
-    const [blindedWalletUtxos, feeRate] = await Promise.all([
-      getBlindedWalletUtxos(),
-      fetchFeeRateSatPerKvb(),
-    ])
+      await syncWallet()
+      const [blindedWalletUtxos, feeRate] = await Promise.all([
+        getBlindedWalletUtxos(),
+        fetchFeeRateSatPerKvb(),
+      ])
 
-    const feeBudgetSats = estimateFeeBudgetSats(CLAIM_PRINCIPAL_WEIGHT_UNITS, feeRate)
-    const feeUtxos = selectFeeUtxos(
-      blindedWalletUtxos,
-      lwkNetwork.policyAsset(),
-      feeBudgetSats,
-      feeRate,
-    )
+      const feeBudgetSats = estimateFeeBudgetSats(CLAIM_PRINCIPAL_WEIGHT_UNITS, feeRate)
+      const feeUtxos = selectFeeUtxos(
+        blindedWalletUtxos,
+        lwkNetwork.policyAsset(),
+        feeBudgetSats,
+        feeRate,
+      )
 
-    return claimPrincipal({
-      principalOutpoint,
-      borrowerNftOutpoint: nftOutpoints.borrowerNft,
-      feeOutpoints: feeUtxos.map(utxoToOutpointString),
+      return claimPrincipal({
+        principalOutpoint,
+        borrowerNftOutpoint: nftOutpoints.borrowerNft,
+        feeOutpoints: feeUtxos.map(utxoToOutpointString),
+      })
     })
-  }
 
-  const { mutate, reset, data, error, status } = useMutation({
+  const { mutate, reset, data, status } = useMutation({
     mutationFn: claimBorrowerPrincipal,
     onSuccess: result => {
       void addPendingTx({
@@ -112,7 +115,6 @@ export default function ClaimPrincipalModal({
         summary: txSummary,
         status,
         txid: data?.txid,
-        error: error?.message,
         onConfirm: () => mutate(),
       }}
       onClose={() => {

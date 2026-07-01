@@ -21,6 +21,7 @@ import { useCreateOffer } from '@/hooks/useCreateOffer'
 import { useFeeRateSatPerKvb } from '@/hooks/useFeeRate'
 import { useFreezeViewWhileOpen } from '@/hooks/useFreezeViewWhileOpen'
 import { type PolicyAssetUtxo, usePolicyAssetUtxos } from '@/hooks/usePolicyAssetUtxos'
+import { useStandardTransactionFlow } from '@/hooks/useStandardTransactionFlow'
 import { estimateFeeBudgetSats, EXPLICIT_SIGNATURE_MAX_WEIGHT_TO_SATISFY } from '@/lwk/utxo'
 import type { PolicyAssetDenomination } from '@/providers/assetDenomination/constants'
 import { useAssetDenomination } from '@/providers/assetDenomination/useAssetDenomination'
@@ -251,6 +252,7 @@ export default function CreateBorrowOfferModal({
   const { utxos, isLoading: isLoadingUtxos } = usePolicyAssetUtxos(isOpen)
   const { factoryState, refetchFactory } = useBorrowerAccount()
   const { createOffer } = useCreateOffer()
+  const runStandardTransactionFlow = useStandardTransactionFlow()
   const { addPendingTx, addSurfaceToast } = usePendingTransactions()
   const feeRate = useFeeRateSatPerKvb(isOpen)
   const feeBudgetSats = useMemo(
@@ -304,36 +306,43 @@ export default function CreateBorrowOfferModal({
   const loanDurationBlocks = values.termDays ? daysToBlocks(values.termDays) : 0
 
   const createBorrowOffer = useCallback(async () => {
-    if (!factoryState) throw new Error('No active factory found. Create a borrower account first.')
-    const collateralUtxos = selectByLargestFirst(utxos, collateralBase + feeBudgetSats)
-    if (!collateralUtxos) throw new Error('No suitable collateral UTXOs found')
-    const result = await createOffer({
-      factoryAuthOutpoint: factoryState.factoryAuthOutpoint,
-      issuanceFactoryOutpoint: factoryState.issuanceFactoryOutpoint,
-      factoryAssetId: factoryState.factoryAssetId,
-      collateralOutpoints: collateralUtxos.map(utxo => utxo.outpoint),
-      collateralAmount: collateralBase,
-      principalAssetId: NETWORK_CONFIG.principalAsset.id,
-      principalAmount: principalBase,
-      principalInterestRate: bps,
-      loanDurationBlocks,
-      protocolFeeKeeperAssetId: NETWORK_CONFIG.principalAsset.id,
+    const { txid } = await runStandardTransactionFlow(async () => {
+      if (!factoryState) {
+        throw new Error('No active factory found. Create a borrower account first.')
+      }
+      const collateralUtxos = selectByLargestFirst(utxos, collateralBase + feeBudgetSats)
+      if (!collateralUtxos) throw new Error('No suitable collateral UTXOs found')
+
+      return createOffer({
+        factoryAuthOutpoint: factoryState.factoryAuthOutpoint,
+        issuanceFactoryOutpoint: factoryState.issuanceFactoryOutpoint,
+        factoryAssetId: factoryState.factoryAssetId,
+        collateralOutpoints: collateralUtxos.map(utxo => utxo.outpoint),
+        collateralAmount: collateralBase,
+        principalAssetId: NETWORK_CONFIG.principalAsset.id,
+        principalAmount: principalBase,
+        principalInterestRate: bps,
+        loanDurationBlocks,
+        protocolFeeKeeperAssetId: NETWORK_CONFIG.principalAsset.id,
+      })
     })
+
     refetchFactory()
-    return result.txid
+    return txid
   }, [
     factoryState,
     utxos,
     collateralBase,
     feeBudgetSats,
+    runStandardTransactionFlow,
+    createOffer,
     principalBase,
     bps,
     loanDurationBlocks,
     refetchFactory,
-    createOffer,
   ])
 
-  const { mutate, reset, data, error, status } = useMutation({
+  const { mutate, reset, data, status } = useMutation({
     mutationFn: createBorrowOffer,
     onSuccess: txid => {
       void addPendingTx({
@@ -363,12 +372,10 @@ export default function CreateBorrowOfferModal({
     [values.borrow, principalAsset.symbol, collateralBase, denomination, collateralAsset],
   )
 
-  const liveErrorMessage = error?.message
   const view = useFreezeViewWhileOpen(isOpen, {
     status,
     summary: txSummary,
     txid: data,
-    errorMessage: liveErrorMessage,
   })
 
   const handleClose = () => {
@@ -379,9 +386,7 @@ export default function CreateBorrowOfferModal({
     onClose()
   }
 
-  const onSubmit = handleSubmit(() => {
-    mutate()
-  })
+  const onSubmit = handleSubmit(() => mutate())
 
   if (view.status !== 'idle') {
     return (
@@ -391,7 +396,6 @@ export default function CreateBorrowOfferModal({
         status={view.status}
         summary={view.summary}
         txid={view.txid}
-        errorMessage={view.errorMessage}
         onClose={handleClose}
       />
     )

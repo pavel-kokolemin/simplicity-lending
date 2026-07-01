@@ -10,6 +10,7 @@ import OfferActionShell from '@/components/modals/OfferActionShell'
 import OfferDetailsBody from '@/components/modals/OfferDetailsBody'
 import { useFormatAmount } from '@/hooks/useFormatAmount'
 import { useLiquidateOffer } from '@/hooks/useLiquidateOffer'
+import { useStandardTransactionFlow } from '@/hooks/useStandardTransactionFlow'
 import {
   estimateFeeBudgetSats,
   EXPLICIT_SIGNATURE_MAX_WEIGHT_TO_SATISFY,
@@ -40,39 +41,41 @@ export default function LiquidateOfferModal({
   const { syncWallet, getBlindedWalletUtxos, scriptPubkey } = useWallet()
   const { lwkNetwork } = useLwk()
   const { liquidateOffer } = useLiquidateOffer()
+  const runStandardTransactionFlow = useStandardTransactionFlow()
   const { addPendingTx } = usePendingTransactions()
   const { formatCollateralDisplay } = useFormatAmount()
 
-  const liquidateExpiredOffer = async () => {
-    const fullOffer = await fetchOffer(offer.id)
-    const activeOfferOutpoint = resolveActiveOutpoint(fullOffer)
-    if (!activeOfferOutpoint) throw new Error('Active offer UTXO not found')
+  const liquidateExpiredOffer = () =>
+    runStandardTransactionFlow(async () => {
+      const fullOffer = await fetchOffer(offer.id)
+      const activeOfferOutpoint = resolveActiveOutpoint(fullOffer)
+      if (!activeOfferOutpoint) throw new Error('Active offer UTXO not found')
 
-    const lenderNftOutpoint = resolveLenderNftOutpoint(fullOffer)
-    if (!lenderNftOutpoint) throw new Error('Lender NFT UTXO not found')
+      const lenderNftOutpoint = resolveLenderNftOutpoint(fullOffer)
+      if (!lenderNftOutpoint) throw new Error('Lender NFT UTXO not found')
 
-    await syncWallet()
-    const [blindedWalletUtxos, feeRate] = await Promise.all([
-      getBlindedWalletUtxos(),
-      fetchFeeRateSatPerKvb(),
-    ])
-    const feeBudgetSats = estimateFeeBudgetSats(LIQUIDATE_WEIGHT_UNITS, feeRate)
-    const feeUtxos = selectFeeUtxos(
-      blindedWalletUtxos,
-      lwkNetwork.policyAsset(),
-      feeBudgetSats,
-      feeRate,
-    )
+      await syncWallet()
+      const [blindedWalletUtxos, feeRate] = await Promise.all([
+        getBlindedWalletUtxos(),
+        fetchFeeRateSatPerKvb(),
+      ])
+      const feeBudgetSats = estimateFeeBudgetSats(LIQUIDATE_WEIGHT_UNITS, feeRate)
+      const feeUtxos = selectFeeUtxos(
+        blindedWalletUtxos,
+        lwkNetwork.policyAsset(),
+        feeBudgetSats,
+        feeRate,
+      )
 
-    return liquidateOffer({
-      activeOfferOutpoint,
-      createOfferTxid: offer.created_at_txid,
-      lenderNftOutpoint,
-      feeOutpoints: feeUtxos.map(utxoToOutpointString),
+      return liquidateOffer({
+        activeOfferOutpoint,
+        createOfferTxid: offer.created_at_txid,
+        lenderNftOutpoint,
+        feeOutpoints: feeUtxos.map(utxoToOutpointString),
+      })
     })
-  }
 
-  const { mutate, reset, data, error, status } = useMutation({
+  const { mutate, reset, data, status } = useMutation({
     mutationFn: liquidateExpiredOffer,
     onSuccess: result => {
       void addPendingTx({
@@ -110,7 +113,6 @@ export default function LiquidateOfferModal({
         summary: txSummary,
         status,
         txid: data?.txid,
-        error: error?.message,
         onConfirm: () => mutate(),
       }}
       onClose={() => {

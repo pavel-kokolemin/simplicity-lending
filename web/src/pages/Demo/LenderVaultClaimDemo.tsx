@@ -5,7 +5,8 @@ import { z as zod } from 'zod'
 
 import { UiButton } from '@/components/ui/UiButton'
 import { UiTextField } from '@/components/ui/UiTextField'
-import { type LenderVaultClaimResult, useLenderVaultClaim } from '@/hooks/useLenderVaultClaim'
+import { type LenderVaultClaimSummary, useLenderVaultClaim } from '@/hooks/useLenderVaultClaim'
+import { useStandardTransactionFlow } from '@/hooks/useStandardTransactionFlow'
 import { useTxStatus } from '@/hooks/useTxStatus'
 import { isConfirmedWalletUtxo, isPolicyAssetUtxo } from '@/lwk/utxo'
 import { useLwk } from '@/providers/lwk/useLwk'
@@ -67,7 +68,7 @@ const lenderVaultClaimFormResolver: Resolver<LenderVaultClaimForm> = async value
 interface BroadcastState {
   busy: boolean
   error: string | null
-  result: LenderVaultClaimResult | null
+  result: { txid: string; summary: LenderVaultClaimSummary } | null
 }
 
 interface WalletUtxosState {
@@ -92,6 +93,7 @@ export default function LenderVaultClaimDemo() {
   const { lwkNetwork } = useLwk()
   const { connectionStatus, getBlindedWalletUtxos, syncing, syncWallet } = useWallet()
   const { claimLenderVault } = useLenderVaultClaim()
+  const runStandardTransactionFlow = useStandardTransactionFlow()
   const { control, handleSubmit } = useForm<LenderVaultClaimForm>({
     defaultValues: EMPTY_FORM,
     mode: 'onSubmit',
@@ -156,7 +158,11 @@ export default function LenderVaultClaimDemo() {
       if (!result.success) {
         throw new Error(result.error.issues.map(issue => issue.message).join('; '))
       }
-      setState({ busy: false, error: null, result: await claimLenderVault(result.data) })
+      const { txid, summary } = await runStandardTransactionFlow(() =>
+        claimLenderVault(result.data),
+      )
+
+      setState({ busy: false, error: null, result: { txid, summary } })
     } catch (err) {
       setState({
         busy: false,
