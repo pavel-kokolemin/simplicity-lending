@@ -16,8 +16,15 @@ const NETWORK_LABEL: Record<'liquidtestnet' | 'regtest', string> = {
 }
 
 export function WalletButton({ isDisabled }: { isDisabled?: boolean } = {}) {
-  const { connectionStatus, syncing, receiveAddress, connect, disconnect, reconnecting } =
-    useWallet()
+  const {
+    connectionStatus,
+    syncing,
+    receiveAddress,
+    connect,
+    disconnect,
+    reconnecting,
+    requestId,
+  } = useWallet()
   const { network, isMainnet } = useLwk()
   const [disconnecting, setDisconnecting] = useState(false)
   const [isMenuOpen, setIsMenuOpen] = useState(false)
@@ -50,10 +57,22 @@ export function WalletButton({ isDisabled }: { isDisabled?: boolean } = {}) {
   }
 
   if (syncing && connectionStatus !== 'ready') {
+    const loginLink = requestId ? `liquidconnect://login/?request_id=${requestId}` : null
     return (
-      <UiButton variant='secondary' isDisabled isPending loadingText='Connecting…'>
-        Connecting…
-      </UiButton>
+      <div className='flex flex-col items-end gap-1'>
+        <UiButton variant='secondary' isDisabled isPending loadingText='Connecting…'>
+          Connecting…
+        </UiButton>
+
+        {loginLink && (
+          <a
+            href={loginLink}
+            className='text-primary text-xs font-medium underline-offset-2 hover:underline'
+          >
+            Open login request
+          </a>
+        )}
+      </div>
     )
   }
 

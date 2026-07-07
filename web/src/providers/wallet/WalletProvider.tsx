@@ -165,6 +165,10 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
         }
 
         const request = await connector.getDescriptor(walletType)
+        setState(s => ({
+          ...s,
+          requestId: request.requestId,
+        }))
         const descriptor = await request.result
 
         if (attempt !== connectionChangeCounterRef.current) {

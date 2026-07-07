@@ -48,6 +48,7 @@ export interface WalletState {
   syncing: boolean
   reconnecting: boolean
   usbDeviceDetected: boolean
+  requestId: string | null
   /** Last error message. Persists even after isError is cleared. */
   error: string | null
   /** Whether the error should be shown to the user. Cleared on reconnect or new connect attempt. */
@@ -65,6 +66,7 @@ export const INITIAL_WALLET_STATE: WalletState = {
   syncing: false,
   reconnecting: false,
   usbDeviceDetected: false,
+  requestId: null,
   error: null,
   isError: false,
 }
