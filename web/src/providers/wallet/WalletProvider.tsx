@@ -4,7 +4,8 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { env } from '@/constants/env'
 import { useSessionStorage } from '@/hooks/useSessionStorage'
 import { JadeBusyError, JadeDisconnectedError } from '@/lib/wallet-core/connector/errors'
-import { JadeConnector } from '@/lib/wallet-core/connector/jade'
+import { LiquidConnect } from '@/lib/wallet-core/connector/liquidConnect'
+// import { JadeConnector } from '@/lib/wallet-core/connector/jade'
 import { SeedConnector } from '@/lib/wallet-core/connector/seed'
 import type { WalletConnector } from '@/lib/wallet-core/connector/types'
 import { DEFAULT_WALLET_TYPE, type WalletType } from '@/lib/wallet-core/types'
@@ -139,7 +140,7 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
         const walletType: WalletType = isJade ? variant : DEFAULT_WALLET_TYPE
 
         connector = isJade
-          ? new JadeConnector(lwkNetwork)
+          ? new LiquidConnect()
           : new SeedConnector(lwkNetwork, env.VITE_DEBUG_MNEMONIC)
 
         await connector.connect()
@@ -163,7 +164,8 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
           }))
         }
 
-        const descriptor = await connector.getDescriptor(walletType)
+        const request = await connector.getDescriptor(walletType)
+        const descriptor = await request.result
 
         if (attempt !== connectionChangeCounterRef.current) {
           connector.disconnect().catch(console.warn)
@@ -262,7 +264,7 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
     const session = sessionRef.current
     if (!session) throw new Error('WalletProvider: not connected')
 
-    return session.connector.signPset(pset)
+    return (await session.connector.signPset(pset)).result
   }, [])
 
   // Returns the snapshot derived once on connect — single source of truth for the
